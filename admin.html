@@ -357,15 +357,65 @@ var ICON={
  caixa:'<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6.5 9.5v.01M17.5 14.5v.01"/></svg>'
 };
 function nav(){
-  var t=[['estoque','Estoque'],['cardapio','Cardápio'],['mesas','Mesas'],['caixa','Caixa']];
+  var t=[['estoque','Estoque'],['cardapio','Cardápio'],['mesas','Mesas'],['caixa','Caixa'],['horario','Horário']];
   return '<nav class="nav" aria-label="Seções">'+t.map(function(x){return '<button data-act="tab" data-t="'+x[0]+'" class="'+(ui.tab===x[0]?'on':'')+'" aria-current="'+(ui.tab===x[0])+'">'+ICON[x[0]]+x[1]+'</button>'}).join('')+'</nav>';
 }
-function render(){
-  if(ui.tab==='horario'){ var app=document.getElementById('app'); if(!app){ setTimeout(render,100); return; } app.innerHTML='<header class="top"><img src="https://i.imgur.com/8Km9tLL.png" alt="Na Brasa"><div><div class="nm">Na Brasa Burger</div><div class="sb">Admin</div></div><button class="sair" data-act="sair">Sair</button></header><main class="main">'+viewHorario()+'</main><nav class="nav"><button data-act="tab" data-t="estoque">Estoque</button><button data-act="tab" data-t="cardapio">Cardápio</button><button data-act="tab" data-t="caixa">Caixa</button><button class="on" data-act="tabHorario">Horário</button></nav>'; return; }
 
+/* ---------- HORÁRIO FUNCIONAMENTO ---------- */
+function getHorario(){
+  try{
+    var h=JSON.parse(localStorage.getItem('nabrasa_horario')||'null');
+    if(h && h.dias) return h;
+  }catch(e){}
+  return {dias:{0:{aberto:false,ini:'18:00',fim:'00:00'},1:{aberto:true,ini:'18:00',fim:'00:00'},2:{aberto:true,ini:'18:00',fim:'00:00'},3:{aberto:true,ini:'18:00',fim:'00:00'},4:{aberto:true,ini:'18:00',fim:'00:00'},5:{aberto:true,ini:'18:00',fim:'00:00'},6:{aberto:true,ini:'18:00',fim:'00:00'}},msg:'Estamos fechados no momento. Voltamos em breve.'};
+}
+function salvarHorario(h){
+  try{ localStorage.setItem('nabrasa_horario', JSON.stringify(h)); }catch(e){}
+  try{
+    var cfg=JSON.parse(localStorage.getItem('nabrasa_cardapio_v1')||'{}');
+    cfg.horario=h;
+    cfg.v=Date.now();
+    localStorage.setItem('nabrasa_cardapio_v1', JSON.stringify(cfg));
+  }catch(e){}
+}
+function viewHorario(){
+  var h=getHorario();
+  var diasN=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+  var html='<h1>Horário de Funcionamento</h1><p class="sub">Defina quando o cliente consegue pedir no delivery. Fora do horário o app bloqueia o envio.</p>';
+  html+='<div class="box" style="margin:12px 0"><div class="fld"><label>Mensagem quando fechado (aparece pro cliente)</label><input class="in" id="msgFechado" value="'+esc(h.msg)+'"></div></div>';
+  for(var d=0; d<7; d++){
+    var cfg=h.dias[d]||{aberto:true,ini:'18:00',fim:'00:00'};
+    html+='<div class="box" style="margin-bottom:8px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="min-width:80px">'+diasN[d]+'</b><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="ab_'+d+'" '+(cfg.aberto?'checked':'')+'> Aberto</label><span style="margin-left:auto">das</span><input type="time" id="ini_'+d+'" value="'+cfg.ini+'" style="width:110px"><span>às</span><input type="time" id="fim_'+d+'" value="'+cfg.fim+'" style="width:110px"></div></div>';
+  }
+  html+='<div class="foot" style="margin-top:12px;flex-wrap:wrap"><button class="btn primary" data-act="horarioSalvar">Salvar horário</button><button class="btn ghost" data-act="publicar">Enviar aos celulares (cardapio.json)</button></div>';
+  html+='<div class="box" style="margin-top:12px"><small>Como testar</small><p class="sub">1. Salve o horário. 2. Clique em Enviar aos celulares e suba o cardapio.json no GitHub. 3. Abra o app do cliente fora do horário configurado e tente enviar.</p></div>';
+  return html;
+}
+function excluirPermanente(id){
+  confirmSheet('Excluir este pedido para sempre? Ele vai sumir da lista de cancelados e não poderá ser restaurado.','Excluir para sempre',function(){
+    try{ delete A.excluidos[id]; saveA(); }catch(e){}
+    try{
+      var s=JSON.parse(localStorage.getItem('nabrasa_pedidos_v1')||'{}');
+      if(s.cancelados){ s.cancelados=s.cancelados.filter(function(c){return c.id!==id}); localStorage.setItem('nabrasa_pedidos_v1', JSON.stringify(s)); }
+    }catch(e){}
+    render(); toast('Excluído permanentemente');
+  },true);
+}
+function salvarClienteMesaAdmin(mesaNum, idx, val){
+  try{
+    var s=JSON.parse(localStorage.getItem('nabrasa_pedidos_v1')||'{}');
+    s.mesas=s.mesas||{};
+    if(!s.mesas[mesaNum]) s.mesas[mesaNum]={itens:[],clientes:['','']};
+    if(!s.mesas[mesaNum].clientes) s.mesas[mesaNum].clientes=['',''];
+    s.mesas[mesaNum].clientes[idx-1]=val;
+    localStorage.setItem('nabrasa_pedidos_v1', JSON.stringify(s));
+  }catch(e){}
+}
+
+function render(){
   var app=$('#app');
   if(!ui.auth){app.innerHTML=viewLogin();return}
-  var body=ui.tab==='cardapio'?viewCardapio():ui.tab==='caixa'?viewCaixa():ui.tab==='mesas'?viewMesasAdm():viewEstoque();
+  var body=ui.tab==='cardapio'?viewCardapio():ui.tab==='caixa'?viewCaixa():ui.tab==='mesas'?viewMesasAdm():ui.tab==='horario'?viewHorario():viewEstoque();
   var head=headerBase('<a class="sair b1" href="index.html">Pedidos</a><button class="sair b2" data-act="sair">Sair</button>');
   app.innerHTML=head+'<main class="main">'+body+'</main>'+nav();
 }
@@ -913,6 +963,8 @@ function openVendaDet(id){
 
 /* ---------- mesas (fechamento direto pelo Admin) ---------- */
 function viewMesasAdm(){
+  // patch para mostrar clientes na mesa
+
   var p=ped(),occ=0,val=0,tiles='';
   for(var n=1;n<=TOTAL_MESAS;n++){
     var m=p.mesas[n],has=m&&m.itens&&m.itens.length;
@@ -1050,7 +1102,6 @@ var ACT={
   restaurar:function(d){delete A.excluidos[d.id];saveA();render();toast('Pedido restaurado')},
   excluirPerm:function(d){excluirPermanente(d.id)},
   horarioSalvar:function(){ var h=getHorario(); var msg=document.getElementById('msgFechado'); if(msg) h.msg=msg.value||h.msg; for(var i=0;i<7;i++){ var ab=document.getElementById('ab_'+i); var ini=document.getElementById('ini_'+i); var fim=document.getElementById('fim_'+i); if(!h.dias[i]) h.dias[i]={}; if(ab) h.dias[i].aberto=ab.checked; if(ini) h.dias[i].ini=ini.value||'18:00'; if(fim) h.dias[i].fim=fim.value||'00:00'; } salvarHorario(h); toast('Horário salvo. Clique em Enviar aos celulares para valer para os clientes'); render(); },
-  tabHorario:function(){ui.tab='horario';render(); window.scrollTo(0,0);},
   estEdit:function(d){openEst(d.k)},
   estRepetir:function(){
     var ant=A.est[addDays(ui.dia,-1)];
@@ -1137,73 +1188,6 @@ document.addEventListener('change',function(e){
     rd2.readAsText(e.target.files[0]);e.target.value='';
   }
 });
-
-
-/* ---------- HORARIO FUNCIONAMENTO ---------- */
-
-function salvarClienteMesaAdmin(mesaNum, idx, val){
-  try{
-    var s=JSON.parse(localStorage.getItem('nabrasa_pedidos_v1')||'{}');
-    s.mesas=s.mesas||{};
-    if(!s.mesas[mesaNum]) s.mesas[mesaNum]={itens:[],clientes:['','']};
-    if(!s.mesas[mesaNum].clientes) s.mesas[mesaNum].clientes=['',''];
-    s.mesas[mesaNum].clientes[idx-1]=val;
-    localStorage.setItem('nabrasa_pedidos_v1', JSON.stringify(s));
-  }catch(e){}
-}
-
-function getHorario(){ 
-  try{
-    var h=JSON.parse(localStorage.getItem('nabrasa_horario')||'null');
-    if(h && h.dias) return h;
-  }catch(e){}
-  return {dias:{0:{aberto:false,ini:'18:00',fim:'00:00'},1:{aberto:true,ini:'18:00',fim:'00:00'},2:{aberto:true,ini:'18:00',fim:'00:00'},3:{aberto:true,ini:'18:00',fim:'00:00'},4:{aberto:true,ini:'18:00',fim:'00:00'},5:{aberto:true,ini:'18:00',fim:'00:00'},6:{aberto:true,ini:'18:00',fim:'00:00'}},msg:'Estamos fechados no momento. Voltamos em breve.'};
-}
-function salvarHorario(h){ 
-  try{ localStorage.setItem('nabrasa_horario', JSON.stringify(h)); }catch(e){}
-  try{
-    var cfg=JSON.parse(localStorage.getItem('nabrasa_cardapio_v1')||'{}');
-    cfg.horario=h;
-    cfg.v=Date.now();
-    localStorage.setItem('nabrasa_cardapio_v1', JSON.stringify(cfg));
-  }catch(e){}
-}
-function estaAbertoCheck(h){
-  try{
-    var agora=new Date(); var dia=agora.getDay();
-    var cfg=h.dias[dia]; if(!cfg || !cfg.aberto) return false;
-    var p1=cfg.ini.split(':'), p2=cfg.fim.split(':');
-    var minAgora=agora.getHours()*60+agora.getMinutes();
-    var minIni=parseInt(p1[0])*60+parseInt(p1[1]||0);
-    var minFim=parseInt(p2[0])*60+parseInt(p2[1]||0);
-    if(minFim===0) minFim=1439;
-    if(minFim < minIni){ return minAgora>=minIni || minAgora<=minFim; }
-    return minAgora>=minIni && minAgora<=minFim;
-  }catch(e){ return true; }
-}
-function viewHorario(){
-  var h=getHorario();
-  var diasN=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
-  var html='<h1>Horário de Funcionamento</h1><p class="sub">Controle quando o cliente consegue fazer pedidos no delivery. Fora do horário, o app do cliente bloqueia.</p>';
-  html+='<div class="box" style="margin:12px 0"><div class="fld"><label>Mensagem quando fechado</label><input class="in" id="msgFechado" value="'+esc(h.msg)+'" placeholder="Estamos fechados no momento"></div></div>';
-  for(var d=0; d<7; d++){
-    var cfg=h.dias[d]||{aberto:true,ini:'18:00',fim:'00:00'};
-    html+='<div class="box" style="margin-bottom:8px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="min-width:80px">'+diasN[d]+'</b><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="ab_'+d+'" '+(cfg.aberto?'checked':'')+'> Aberto</label><span style="margin-left:auto">das</span><input type="time" id="ini_'+d+'" value="'+cfg.ini+'"><span>às</span><input type="time" id="fim_'+d+'" value="'+cfg.fim+'"></div></div>';
-  }
-  html+='<div class="foot" style="margin-top:12px;flex-wrap:wrap"><button class="btn primary" data-act="horarioSalvar">Salvar horário</button><button class="btn ghost" data-act="publicar">Enviar aos celulares</button></div>';
-  html+='<div class="box" style="margin-top:12px"><small>Como funciona</small><p class="sub">Ao salvar, o horário é salvo neste aparelho e também no cardapio.json quando você clicar em Enviar aos celulares. Depois suba o cardapio.json no GitHub para valer para todos os clientes.</p></div>';
-  return html;
-}
-function excluirPermanente(id){
-  confirmSheet('Excluir para sempre? Este pedido vai sumir da lista de cancelados e não poderá ser restaurado nunca mais.','Excluir para sempre',function(){
-    try{ delete A.excluidos[id]; saveA(); }catch(e){}
-    try{
-      var s=JSON.parse(localStorage.getItem('nabrasa_pedidos_v1')||'{}');
-      if(s.cancelados){ s.cancelados=s.cancelados.filter(function(c){return c.id!==id}); localStorage.setItem('nabrasa_pedidos_v1', JSON.stringify(s)); }
-    }catch(e){}
-    render(); toast('Excluído permanentemente');
-  },true);
-}
 
 render();
 if(ui.auth)siteAtualizar(function(){render()});
