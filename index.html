@@ -330,7 +330,13 @@ function formasTxt(v){var p=v.pagamentos;return p.map(function(x){return FORMA[x
 /* ---------- Pedido em edição ---------- */
 function holderAtual(){
   var o=ui.order;
-  return o.tipo==='mesa'?(S.mesas[o.mesa]||(S.mesas[o.mesa]={itens:[],t:Date.now()})):(S.drafts[o.cid]||(S.drafts[o.cid]={itens:[]}));
+  if(o.tipo==='mesa'){
+    var m=S.mesas[o.mesa]||(S.mesas[o.mesa]={itens:[],t:Date.now(),clientes:['','']});
+    if(!m.clientes) m.clientes=['',''];
+    if(m.clientes.length<2) m.clientes=[''.concat(m.clientes[0]||''), ''.concat(m.clientes[1]||'')];
+    return m;
+  }
+  return (S.drafts[o.cid]||(S.drafts[o.cid]={itens:[]}));
 }
 function marcarAtendente(){
   var h=holderAtual();h.atendentes=h.atendentes||[];
@@ -341,8 +347,12 @@ function nomes(l){return (l||[]).map(nomeBonito).join(', ')}
 function orderCtx(){
   var o=ui.order;
   if(o.tipo==='mesa'){
-    var m=S.mesas[o.mesa]||(S.mesas[o.mesa]={itens:[],t:Date.now()});
-    return {tipo:'mesa',itens:m.itens,taxa:0,titulo:'Mesa '+o.mesa,sub:(m.atendentes&&m.atendentes.length?'Atendida por '+nomes(m.atendentes):'Pedido de mesa')};
+    var m=S.mesas[o.mesa]||(S.mesas[o.mesa]={itens:[],t:Date.now(),clientes:['','']});
+    if(!m.clientes) m.clientes=['',''];
+    var cliTxt = (m.clientes[0]||m.clientes[1]) ? 'Clientes: '+[m.clientes[0],m.clientes[1]].filter(Boolean).join(' e ') : '';
+    var atendTxt = (m.atendentes&&m.atendentes.length?'Atendida por '+nomes(m.atendentes):'Pedido de mesa');
+    var sub = cliTxt ? cliTxt + ' · ' + atendTxt : atendTxt;
+    return {tipo:'mesa',itens:m.itens,taxa:0,titulo:'Mesa '+o.mesa,sub:sub,clientes:m.clientes};
   }
   var c=S.clientes.filter(function(x){return x.id===o.cid})[0];
   var d=S.drafts[o.cid]||(S.drafts[o.cid]={itens:[]});
@@ -377,12 +387,13 @@ function render(){
   $('#app').innerHTML=header()+'<main class="main">'+body+'</main>'+bar;
 }
 
+function salvarClienteMesa(idx,val){ var m=S.mesas[ui.order.mesa]; if(!m) return; if(!m.clientes) m.clientes=['','']; m.clientes[idx-1]=val; save(); }
 function viewMesas(){
   var occ=0,aberto=0,tiles='';
   for(var n=1;n<=TOTAL_MESAS;n++){
     var m=S.mesas[n],has=m&&m.itens.length;
     if(has){occ++;aberto+=subtotal(m.itens)}
-    tiles+='<button class="mesa '+(has?'occ':'free')+'" data-act="openMesa" data-n="'+n+'" aria-label="Mesa '+n+(has?' ocupada':' livre')+'"><b>'+n+'</b><small>'+(has?money(subtotal(m.itens)):'livre')+'</small></button>';
+    tiles+='<button class="mesa '+(has?'occ':'free')+'" data-act="openMesa" data-n="'+n+'" aria-label="Mesa '+n+(has?' ocupada':' livre')+'"><b>'+n+'</b><small>'+(has? (m.clientes && (m.clientes[0]||m.clientes[1]) ? esc((m.clientes[0]||'').slice(0,10)) : money(subtotal(m.itens)) ) :'livre')+'</small></button>';
   }
   return '<h1>Mesas</h1><p class="sub">Toque em uma mesa para lançar ou ver o pedido.</p>'+
    '<div class="legend"><span class="pill"><i class="dot"></i>'+(TOTAL_MESAS-occ)+' livres</span><span class="pill"><i class="dot r"></i>'+occ+' ocupadas</span>'+(occ?'<span class="pill">Em aberto: '+money(aberto)+'</span>':'')+'</div>'+
@@ -392,7 +403,10 @@ function viewMesas(){
 
 function viewOrder(){
   var c=orderCtx();
-  var h='<div class="otop"><button class="back" data-act="closeOrder">‹ Voltar</button><div style="flex:1;min-width:0"><h1>'+esc(c.titulo)+'</h1><p class="sub">'+esc(c.sub)+'</p></div><button class="btn ghost danger sm" data-act="cancelarPedido" '+(c.itens.length?'':'disabled')+'>Cancelar pedido</button></div>'+
+  var mesaObj = c.tipo==='mesa' ? (S.mesas[ui.order.mesa]||{}) : null;
+  var cli1 = mesaObj && mesaObj.clientes ? esc(mesaObj.clientes[0]||'') : '';
+  var cli2 = mesaObj && mesaObj.clientes ? esc(mesaObj.clientes[1]||'') : '';
+  var h='<div class="otop"><button class="back" data-act="closeOrder">‹ Voltar</button><div style="flex:1;min-width:0"><h1>'+esc(c.titulo)+'</h1><p class="sub">'+esc(c.sub)+'</p></div><button class="btn ghost danger sm" data-act="cancelarPedido" '+(c.itens.length?'':'disabled')+'>Cancelar pedido</button></div>'+ (c.tipo==='mesa' ? '<div class="box" style="margin-bottom:12px"><small>Clientes na mesa (até 2)</small><div class="two" style="margin-top:6px"><div class="fld" style="margin:0"><label>Cliente 1</label><input class="in" id="cliM1" value="'+cli1+'" placeholder="Nome do cliente 1" oninput="salvarClienteMesa(1,this.value)"></div><div class="fld" style="margin:0"><label>Cliente 2</label><input class="in" id="cliM2" value="'+cli2+'" placeholder="Nome do cliente 2" oninput="salvarClienteMesa(2,this.value)"></div></div></div>' : '') +
    (c.tipo==='mesa'?'<div class="chips" style="margin-bottom:12px"><button class="chip '+(S.mesas[ui.order.mesa]&&S.mesas[ui.order.mesa].autoImp?'on':'')+'" data-act="autoImp" aria-pressed="'+!!(S.mesas[ui.order.mesa]&&S.mesas[ui.order.mesa].autoImp)+'">🖨️ Imprimir automaticamente os novos itens</button></div>':'');
   h+='<div class="seg"><button data-act="panel" data-p="cardapio" class="'+(ui.panel==='cardapio'?'on':'')+'">Cardápio</button><button data-act="panel" data-p="comanda" class="'+(ui.panel==='comanda'?'on':'')+'">Comanda'+(c.itens.length?'<span class="cnt">'+c.itens.length+'</span>':'')+'</button></div>';
   if(ui.panel==='cardapio'){
@@ -1010,7 +1024,8 @@ var ACT={
     var hold=holderAtual(),atend=(hold.atendentes||[]).slice();
     openPay(total,c.titulo,function(pg,troco,imprimir){
       var now=Date.now();
-      var v={id:uid(),atendente:ui.user,atendentes:atend,tipo:c.tipo,ts:now,dia:dayKey(now),itens:clone(c.itens),subtotal:subtotal(c.itens),taxa:c.taxa,total:total,pagamentos:pg,trocoPara:troco,origem:hold.origem||'',codigo:hold.codigo||''};
+      var clientesMesa = (c.tipo==='mesa' && S.mesas[ui.order.mesa] && S.mesas[ui.order.mesa].clientes) ? S.mesas[ui.order.mesa].clientes.filter(Boolean) : [];
+      var v={id:uid(),atendente:ui.user,atendentes:atend,tipo:c.tipo,ts:now,dia:dayKey(now),itens:clone(c.itens),subtotal:subtotal(c.itens),taxa:c.taxa,total:total,pagamentos:pg,trocoPara:troco,origem:hold.origem||'',codigo:hold.codigo||'',clientesMesa:clientesMesa};
       if(c.tipo==='mesa'){v.mesa=ui.order.mesa;delete S.mesas[v.mesa]}
       else{v.clienteId=c.cliente.id;v.cliente=c.cliente.nome;v.endereco=enderecoDe(c.cliente);v.bairro=c.cliente.bairro;delete S.drafts[c.cliente.id]}
       S.vendas.push(v);save();closeSheet();ui.order=null;render();window.scrollTo(0,0);
