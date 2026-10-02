@@ -283,7 +283,8 @@ C.perfil=C.perfil||{nome:'',rua:'',numero:'',bairro:'',ref:''};
 C.pedidos=C.pedidos||[];C.favs=C.favs||[];C.cart=C.cart||[];C.pag=C.pag||'pix';C.troco=C.troco||'';
 function save(){try{localStorage.setItem(K_CLI,JSON.stringify(C))}catch(e){}}
 var MENU=[],EXTRAS=[];
-function aplicaCfg(c){
+function salvaHorarioDoCardapio(c){ try{ if(c && c.horario){ localStorage.setItem('nabrasa_horario', JSON.stringify(c.horario)); } }catch(e){} }
+function aplicaCfg(c){ salvaHorarioDoCardapio(c);
   MENU=(c.itens||[]).filter(function(i){return i.ativo!==false}).map(function(i){return {id:i.id,nome:i.nome,preco:Number(i.preco)||0,cat:i.cat,desc:i.desc||''}});
   EXTRAS=(c.extras||[]).map(function(e){return {id:e.id,nome:e.nome,preco:Number(e.preco)||0}});
 }
@@ -321,8 +322,35 @@ function recotar(itens){
 function header(){
   return '<header class="top"><img src="'+LOGO+'" alt="Na Brasa Burger" class="mini"><div><div class="nm">Na Brasa Burger</div><div class="sb">Peça pelo WhatsApp</div></div></header>';
 }
+function getHorarioStatus(){
+  try{
+    var h=null;
+    try{ var s=localStorage.getItem('nabrasa_horario'); if(s) h=JSON.parse(s); }catch(e){}
+    if(!h){ try{ var m=localStorage.getItem('nabrasa_cardapio_v1'); if(m){ var j=JSON.parse(m); if(j&&j.horario) h=j.horario; } }catch(e){} }
+    if(!h || !h.dias) return {aberto:true, txt:''};
+    var agora=new Date(); var dia=agora.getDay();
+    var cfg=h.dias[dia]; if(!cfg || !cfg.aberto) return {aberto:false, msg:h.msg||'Estamos fechados'};
+    var p1=cfg.ini.split(':'), p2=cfg.fim.split(':');
+    var minAgora=agora.getHours()*60+agora.getMinutes();
+    var minIni=parseInt(p1[0])*60+parseInt(p1[1]||0);
+    var minFim=parseInt(p2[0])*60+parseInt(p2[1]||0);
+    if(minFim===0) minFim=1439;
+    var aberto=false;
+    if(minFim < minIni){ aberto = minAgora>=minIni || minAgora<=minFim; } else { aberto = minAgora>=minIni && minAgora<=minFim; }
+    return {aberto:aberto, msg:h.msg||'Estamos fechados', cfg:cfg};
+  }catch(e){ return {aberto:true, txt:''}; }
+}
 function hero(){
-  return '<section class="hero"><img src="'+LOGO+'" alt="Na Brasa Burger — hambúrguer artesanal"><p>Delivery em Ipeúna · peça pelo WhatsApp</p></section>';
+  var st=getHorarioStatus();
+  var banner='';
+  if(st && st.cfg!=null){
+    if(st.aberto){
+      banner='<div style="background:#1b8a4b;color:#fff;text-align:center;padding:14px 16px;font-family:Alfa Slab One,serif;font-size:24px;letter-spacing:1px;border-top:4px solid #ffc400;border-bottom:4px solid #ffc400">🟢 ESTAMOS ATENDENDO</div>';
+    }else{
+      banner='<div style="background:#d62828;color:#fff;text-align:center;padding:14px 16px;font-family:Alfa Slab One,serif;font-size:20px;letter-spacing:1px;line-height:1.2;border-top:4px solid #ffc400;border-bottom:4px solid #ffc400">🔴 ESTAMOS FECHADOS<br><span style="font-family:Barlow;font-size:14px;letter-spacing:0">'+esc(st.msg).toUpperCase()+'</span></div>';
+    }
+  }
+  return '<section class="hero"><img src="'+LOGO+'" alt="Na Brasa Burger — hambúrguer artesanal"><p>Delivery em Ipeúna · peça pelo WhatsApp</p></section>'+banner;
 }
 function catnav(){
   var b=[];
@@ -534,9 +562,10 @@ function pedidoJSON(p){
     it:p.itens.map(function(i){return {i:i.id,n:i.nome,p:i.preco,q:i.qtd,k:i.promo?'promo':(i.cat||(i.lanche?'lanche':'porcao')),c:(i.comp||[]).map(function(c){return {i:c.id,n:c.nome,k:c.cat,q:c.qtd}}),s:i.sem||[],o:i.obs||'',e:(i.extras||[]).map(function(e){return {i:e.id,n:e.nome,p:e.preco,q:e.qtd}})}})};
 }
 /* ---------- nuvem da loja (opcional): guarda o pedido para o app da loja e o Admin ---------- */
-var K_CONF='nabrasa_config';
 var NUVEM_FIXA='https://script.google.com/macros/s/AKfycbzM4Gcey4x0IeXxGAw3hPHAW0qxP8illIzPNQO07_PHkIxH5rGtkjkJx5A5eM2NM9dk-g/exec';
-var NUVEM_URL=(rd(K_CONF)||{}).nuvem||NUVEM_FIXA;
+var CHAVE_FIXA='nabrasa2026';
+var K_CONF='nabrasa_config';
+var NUVEM_URL=(rd(K_CONF)||{}).nuvem||'';
 C.fila=C.fila||[];
 function nuvemEnviar(ped){
   if(!NUVEM_URL)return;
@@ -553,7 +582,7 @@ function nuvemFlush(){
   });
 }
 function urlZap(texto){return 'https://wa.me/'+ZAP+'?text='+encodeURIComponent(texto)}
-function enviar(){
+function enviar(){ var hs=getHorarioStatus(); if(hs && hs.cfg!=null && !hs.aberto){ toast(hs.msg||'Estamos fechados no momento'); return; }
   var p=C.perfil;
   if(!C.cart.length){toast('Seu pedido está vazio');return}
   if(!p.nome.trim()){toast('Informe seu nome');var a=$('#cnome');if(a)a.focus();return}
