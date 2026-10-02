@@ -1194,8 +1194,8 @@ document.addEventListener('change',function(e){
 render();
 if(ui.auth)siteAtualizar(function(){render()});
 try{
-  fetch('config.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{if(j&&j.nuvem){CONF=j;wr(K_CONF,j)}}).catch(()=>{}); fetch('config.json',{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(j){
-    if(j&&typeof j.nuvem==='string'){CONF=j;wr(K_CONF,j);}if(!CONF.nuvem){CONF.nuvem='https://script.google.com/macros/s/AKfycbzM4Gcey4x0IeXxGAw3hPHAW0qxP8illIzPNQO07_PHkIxH5rGtkjkJx5A5eM2NM9dk-g/exec'; CONF.chave='nabrasa2026';}if(true){if(ui.auth)siteAtualizar(function(){render()})}
+  fetch('config.json',{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(j){
+    if(j&&typeof j.nuvem==='string'){CONF=j;wr(K_CONF,j);if(ui.auth)siteAtualizar(function(){render()})}
   }).catch(function(){});
 }catch(e){}
 })();
